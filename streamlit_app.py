@@ -4,79 +4,79 @@ from datetime import datetime
 
 st.set_page_config(page_title="Document Analysis Chat", layout="wide")
 
-# Custom CSS for WhatsApp-like styling
-st.markdown("""
-<style>
-.chat-container {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-}
-.user-message-container {
-    display: flex;
-    justify-content: flex-end;
-    margin: 5px 0;
-}
-.assistant-message-container {
-    display: flex;
-    justify-content: flex-start;
-    margin: 5px 0;
-}
-.user-message {
-    background-color: #dcf8c6;
-    padding: 10px;
-    border-radius: 10px;
-    max-width: 70%;
-    margin-right: 15px;
-    color: #000000;  /* Black text color */
-}
-.assistant-message {
-    background-color: #ffffff;
-    padding: 10px;
-    border-radius: 10px;
-    max-width: 70%;
-    margin-left: 15px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    color: #000000;  /* Black text color */
-}
-.message-time {
-    color: #999999;
-    font-size: 0.8em;
-    float: right;
-    margin-top: 5px;
-}
-.source-citation {
-    font-size: 0.8em;
-    color: #666666;
-    border-left: 3px solid #ccc;
-    padding-left: 10px;
-    margin-top: 5px;
-}
-</style>
-""", unsafe_allow_html=True)
+# Custom CSS for chat styling
+st.markdown(
+    """
+    <style>
+    .chat-container {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+    .user-message-container {
+        display: flex;
+        justify-content: flex-end;
+        margin: 5px 0;
+    }
+    .assistant-message-container {
+        display: flex;
+        justify-content: flex-start;
+        margin: 5px 0;
+    }
+    .user-message {
+        background-color: #dcf8c6;
+        padding: 10px;
+        border-radius: 10px;
+        max-width: 70%;
+        margin-right: 15px;
+        color: #000;
+    }
+    .assistant-message {
+        background-color: #fff;
+        padding: 10px;
+        border-radius: 10px;
+        max-width: 70%;
+        margin-left: 15px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        color: #000;
+    }
+    .message-time {
+        color: #999;
+        font-size: 0.8em;
+        margin-top: 5px;
+        text-align: right;
+    }
+    .source-citation {
+        font-size: 0.8em;
+        color: #666;
+        border-left: 3px solid #ccc;
+        padding-left: 10px;
+        margin-top: 5px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 st.title("📄 Document Analysis Chat")
 
-# Initialize the content engine
 @st.cache_resource
 def get_content_engine():
     return ContentEngine()
 
 engine = get_content_engine()
 
-# Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display chat messages
-for message in st.session_state.messages:
-    if message["role"] == "user":
+def render_message(role, content, timestamp, sources=""):
+    if role == "user":
         st.markdown(f"""
         <div class="chat-container">
             <div class="user-message-container">
                 <div class="user-message">
-                    {message["content"]}
-                    <div class="message-time">{message["timestamp"]}</div>
+                    {content}
+                    <div class="message-time">{timestamp}</div>
                 </div>
             </div>
         </div>
@@ -86,41 +86,32 @@ for message in st.session_state.messages:
         <div class="chat-container">
             <div class="assistant-message-container">
                 <div class="assistant-message">
-                    {message["content"]}
-                    <div class="message-time">{message["timestamp"]}</div>
-                    <div class="source-citation">{message.get('sources', '')}</div>
+                    {content}
+                    <div class="message-time">{timestamp}</div>
+                    {f'<div class="source-citation">{sources}</div>' if sources else ''}
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-# Chat input
+# Render previous chat messages
+for message in st.session_state.messages:
+    render_message(message["role"], message["content"], message["timestamp"], message.get("sources", ""))
+
 if prompt := st.chat_input("Type your question here..."):
-    # Add user message
+    timestamp = datetime.now().strftime("%H:%M")
     st.session_state.messages.append({
         "role": "user", 
         "content": prompt,
-        "timestamp": datetime.now().strftime("%H:%M")
+        "timestamp": timestamp
     })
-    
-    with st.chat_message("user"):
-        st.markdown(f"""
-        <div class="chat-container">
-            <div class="user-message-container">
-                <div class="user-message">
-                    {prompt}
-                    <div class="message-time">{datetime.now().strftime("%H:%M")}</div>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    render_message("user", prompt, timestamp)
 
-    # Generate response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             result = engine.query(prompt)
             if isinstance(result, dict):
-                answer = result['answer']
+                answer = result.get('answer', 'No answer provided')
                 sources = "\n".join([
                     f"Source {i+1}: {doc.metadata.get('source', 'Unknown')} (Page {doc.metadata.get('page', 'Unknown')})" 
                     for i, doc in enumerate(result.get('source_documents', []))
@@ -128,22 +119,11 @@ if prompt := st.chat_input("Type your question here..."):
             else:
                 answer = result
                 sources = ""
-
+            timestamp = datetime.now().strftime("%H:%M")
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": answer,
                 "sources": sources,
-                "timestamp": datetime.now().strftime("%H:%M")
+                "timestamp": timestamp
             })
-
-            st.markdown(f"""
-            <div class="chat-container">
-                <div class="assistant-message-container">
-                    <div class="assistant-message">
-                        {answer}
-                        <div class="message-time">{datetime.now().strftime("%H:%M")}</div>
-                        <div class="source-citation">{sources}</div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            render_message("assistant", answer, timestamp, sources)
