@@ -4,15 +4,53 @@ from typing import List
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_community.llms import LlamaCpp
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-
+from langchain.embeddings.base import Embeddings
+from sentence_transformers import SentenceTransformer
+import numpy as np
+    
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Custom embeddings class for Stella model
+class StellaEmbeddings(Embeddings):
+    def __init__(self, model_name: str = "dunzhang/stella_en_400M_v5"):
+        """Initialize the Stella embeddings model for CPU usage"""
+        try:
+            self.model = SentenceTransformer(
+                model_name,
+                trust_remote_code=True,
+                device="cpu",
+                config_kwargs={"use_memory_efficient_attention": False, "unpad_inputs": False}
+            )
+            logger.info(f"Successfully initialized Stella embeddings model: {model_name}")
+        except Exception as e:
+            logger.error(f"Error initializing Stella embeddings: {e}")
+            raise
+        
+        self.query_prompt_name = "s2p_query"  # For sentence-to-passage retrieval
+        
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for documents"""
+        try:
+            embeddings = self.model.encode(texts)
+            return embeddings.tolist()
+        except Exception as e:
+            logger.error(f"Error generating document embeddings: {e}")
+            raise
+    
+    def embed_query(self, text: str) -> List[float]:
+        """Generate embeddings for query with special prompt"""
+        try:
+            embedding = self.model.encode([text], prompt_name=self.query_prompt_name)[0]
+            return embedding.tolist()
+        except Exception as e:
+            logger.error(f"Error generating query embedding: {e}")
+            raise
 
 class ContentEngine:
     def __init__(self):
@@ -23,14 +61,21 @@ class ContentEngine:
         # Initialize conversation memory
         self.memory = ConversationBufferMemory(return_messages=True)
         
-        # Initialize embeddings
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        # Use custom Stella embeddings instead of HuggingFaceBgeEmbeddings
+        self.embeddings = StellaEmbeddings(model_name="dunzhang/stella_en_400M_v5")
+        
+        model_filename = "Mistral-7b-Instruct-v0.3.Q4_K_M.gguf"
+        model_path = os.path.join(self.model_dir, model_filename)
+        
+        # Rest of the initialization remains the same
+        if not os.path.isfile(model_path):
+            err_msg = f"Model file not found at path: {model_path}. Please ensure the model file is placed in the correct directory."
+            logger.error(err_msg)
+            raise FileNotFoundError(err_msg)
         try:
             self.llm = LlamaCpp(
-                model_path=os.path.join(self.model_dir, "mistral-7b-instruct-v0.1.Q4_K_M.gguf"),
-                temperature=0.75,
+                model_path=model_path,
+                temperature=0.25,
                 max_tokens=4096,
                 n_ctx=8192,
                 n_batch=512,

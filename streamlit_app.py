@@ -1,10 +1,30 @@
+import os
 import streamlit as st
-from app import ContentEngine
+import shutil
 from datetime import datetime
+from app import ContentEngine
 
 st.set_page_config(page_title="Document Analysis Chat", layout="wide")
 
-# Custom CSS for chat styling
+# Ensure pdf directory exists
+pdf_dir = "./pdfs"
+os.makedirs(pdf_dir, exist_ok=True)
+
+# Function to upload PDFs and save them to the 'pdfs' directory
+def upload_pdfs():
+    uploaded_files = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            file_path = os.path.join(pdf_dir, uploaded_file.name)
+            # Save file to pdfs directory
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+        st.success("Uploaded and saved successfully!")
+
+# Render the uploader above the chat interface
+st.sidebar.header("Upload PDFs")
+upload_pdfs()
+
 st.markdown(
     """
     <style>
