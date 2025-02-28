@@ -17,3 +17,4 @@ pypdf
 yt_dlp
 streamlit
 llama-cpp-python
+langchain-huggingface
